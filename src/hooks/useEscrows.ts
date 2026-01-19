@@ -1,49 +1,9 @@
 import { useState, useCallback } from 'react';
 import { Escrow, EscrowStatus } from '@/types/escrow';
 
-// Mock data for demonstration
-const mockEscrows: Escrow[] = [
-  {
-    escrowId: 1,
-    employer: '0x742d35Cc6634C0532925a3b844Bc9e7595f8dB21',
-    employee: '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
-    jobDesc: 'Build a responsive landing page with React and Tailwind CSS including animations and mobile optimization',
-    amount: '500000000000000000', // 0.5 ETH
-    status: EscrowStatus.InProgress,
-    timestamp: Date.now() - 86400000 * 2,
-  },
-  {
-    escrowId: 2,
-    employer: '0x742d35Cc6634C0532925a3b844Bc9e7595f8dB21',
-    employee: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-    jobDesc: 'Smart contract audit for DeFi protocol - comprehensive security review',
-    amount: '2000000000000000000', // 2 ETH
-    status: EscrowStatus.Completed,
-    timestamp: Date.now() - 86400000 * 5,
-  },
-  {
-    escrowId: 3,
-    employer: '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
-    employee: '0x742d35Cc6634C0532925a3b844Bc9e7595f8dB21',
-    jobDesc: 'Design NFT collection artwork - 10 unique pieces with variations',
-    amount: '1500000000000000000', // 1.5 ETH
-    status: EscrowStatus.Open,
-    timestamp: Date.now() - 86400000,
-  },
-  {
-    escrowId: 4,
-    employer: '0x742d35Cc6634C0532925a3b844Bc9e7595f8dB21',
-    employee: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
-    jobDesc: 'Backend API development for marketplace',
-    amount: '800000000000000000', // 0.8 ETH
-    status: EscrowStatus.Released,
-    timestamp: Date.now() - 86400000 * 10,
-  },
-];
-
 export const useEscrows = (userAddress: string | null) => {
-  const [escrows, setEscrows] = useState<Escrow[]>(mockEscrows);
-  const [earnings, setEarnings] = useState('1250000000000000000'); // 1.25 ETH
+  const [escrows, setEscrows] = useState<Escrow[]>([]);
+  const [earnings, setEarnings] = useState('0');
   const [isLoading, setIsLoading] = useState(false);
 
   const clientEscrows = escrows.filter(
