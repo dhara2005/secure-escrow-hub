@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useWallet } from '@/context/WalletContext';
+import { WalletSelectModal } from './WalletSelectModal';
 import { Wallet, Shield, Lock, Zap } from 'lucide-react';
 
 export const ConnectWalletPrompt: React.FC = () => {
-  const { connect } = useWallet();
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
@@ -62,7 +62,7 @@ export const ConnectWalletPrompt: React.FC = () => {
 
         {/* CTA */}
         <Button
-          onClick={connect}
+          onClick={() => setShowWalletModal(true)}
           size="lg"
           className="gap-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-lg px-8 py-6 animate-pulse-glow"
         >
@@ -70,10 +70,19 @@ export const ConnectWalletPrompt: React.FC = () => {
           Connect Wallet to Start
         </Button>
 
-        <p className="text-xs text-muted-foreground">
-          Currently supports MetaMask and other Web3 wallets
-        </p>
+        {/* Supported Wallets */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Supported Wallets</p>
+          <div className="flex items-center justify-center gap-4 text-2xl">
+            <span title="MetaMask">🦊</span>
+            <span title="Coinbase Wallet">🔵</span>
+            <span title="Trust Wallet">🛡️</span>
+            <span title="Other Web3 Wallets">🌐</span>
+          </div>
+        </div>
       </div>
+
+      <WalletSelectModal open={showWalletModal} onOpenChange={setShowWalletModal} />
     </div>
   );
 };

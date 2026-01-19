@@ -5,11 +5,66 @@ import { toast } from 'sonner';
 
 export type WalletType = 'metamask' | 'coinbase' | 'trust' | 'injected';
 
+export interface NetworkInfo {
+  chainId: number;
+  name: string;
+  isCorrect: boolean;
+}
+
+export interface SupportedNetwork {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  currency: {
+    name: string;
+    symbol: string;
+    decimals: number;
+  };
+  blockExplorer: string;
+}
+
+// Configure your target network here - update this to match your deployed contract's network
+export const TARGET_CHAIN_ID = 11155111; // Sepolia testnet (change to 1 for mainnet, 137 for Polygon, etc.)
+
+export const SUPPORTED_NETWORKS: Record<number, SupportedNetwork> = {
+  1: {
+    chainId: 1,
+    name: 'Ethereum Mainnet',
+    rpcUrl: 'https://eth.llamarpc.com',
+    currency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    blockExplorer: 'https://etherscan.io',
+  },
+  11155111: {
+    chainId: 11155111,
+    name: 'Sepolia Testnet',
+    rpcUrl: 'https://rpc.sepolia.org',
+    currency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
+    blockExplorer: 'https://sepolia.etherscan.io',
+  },
+  137: {
+    chainId: 137,
+    name: 'Polygon Mainnet',
+    rpcUrl: 'https://polygon-rpc.com',
+    currency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+    blockExplorer: 'https://polygonscan.com',
+  },
+  80001: {
+    chainId: 80001,
+    name: 'Mumbai Testnet',
+    rpcUrl: 'https://rpc-mumbai.maticvigil.com',
+    currency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+    blockExplorer: 'https://mumbai.polygonscan.com',
+  },
+};
+
 interface WalletContextType {
   wallet: WalletState;
   walletType: WalletType | null;
+  network: NetworkInfo | null;
+  targetChainId: number;
   connect: (type?: WalletType) => Promise<void>;
   disconnect: () => void;
+  switchNetwork: (chainId: number) => Promise<void>;
   provider: BrowserProvider | null;
   isConnecting: boolean;
 }
@@ -19,7 +74,6 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 const getProvider = (type: WalletType): Eip1193Provider | null => {
   if (typeof window.ethereum === 'undefined') return null;
   
-  // Handle multiple injected providers
   if (window.ethereum.providers?.length) {
     switch (type) {
       case 'metamask':
@@ -44,6 +98,10 @@ const detectWalletType = (): WalletType | null => {
   return 'injected';
 };
 
+const getNetworkName = (chainId: number): string => {
+  return SUPPORTED_NETWORKS[chainId]?.name || `Chain ${chainId}`;
+};
+
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wallet, setWallet] = useState<WalletState>({
     address: null,
@@ -52,7 +110,65 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [walletType, setWalletType] = useState<WalletType | null>(null);
+  const [network, setNetwork] = useState<NetworkInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  const updateNetwork = useCallback(async (browserProvider: BrowserProvider) => {
+    try {
+      const network = await browserProvider.getNetwork();
+      const chainId = Number(network.chainId);
+      setNetwork({
+        chainId,
+        name: getNetworkName(chainId),
+        isCorrect: chainId === TARGET_CHAIN_ID,
+      });
+    } catch (error) {
+      console.error('Failed to get network:', error);
+    }
+  }, []);
+
+  const switchNetwork = useCallback(async (chainId: number) => {
+    if (typeof window.ethereum === 'undefined') return;
+
+    const targetNetwork = SUPPORTED_NETWORKS[chainId];
+    if (!targetNetwork) {
+      toast.error('Unsupported network');
+      return;
+    }
+
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${chainId.toString(16)}` }],
+      });
+      toast.success(`Switched to ${targetNetwork.name}`);
+    } catch (error: any) {
+      // If the chain hasn't been added to the wallet
+      if (error.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: `0x${chainId.toString(16)}`,
+                chainName: targetNetwork.name,
+                rpcUrls: [targetNetwork.rpcUrl],
+                nativeCurrency: targetNetwork.currency,
+                blockExplorerUrls: [targetNetwork.blockExplorer],
+              },
+            ],
+          });
+          toast.success(`Added and switched to ${targetNetwork.name}`);
+        } catch (addError) {
+          toast.error('Failed to add network');
+        }
+      } else if (error.code === 4001) {
+        toast.error('Network switch rejected');
+      } else {
+        toast.error('Failed to switch network');
+      }
+    }
+  }, []);
 
   const connect = useCallback(async (type: WalletType = 'injected') => {
     setIsConnecting(true);
@@ -90,6 +206,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         balance: parseFloat(formattedBalance).toFixed(4),
       });
 
+      // Update network info
+      await updateNetwork(browserProvider);
+
       toast.success('Wallet connected', {
         description: `Connected to ${address.slice(0, 6)}...${address.slice(-4)}`,
       });
@@ -107,7 +226,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [updateNetwork]);
 
   const disconnect = useCallback(() => {
     setWallet({
@@ -117,6 +236,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
     setProvider(null);
     setWalletType(null);
+    setNetwork(null);
     toast.info('Wallet disconnected');
   }, []);
 
@@ -148,8 +268,34 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    const handleChainChanged = () => {
-      window.location.reload();
+    const handleChainChanged = async (chainIdHex: string) => {
+      const chainId = parseInt(chainIdHex, 16);
+      setNetwork({
+        chainId,
+        name: getNetworkName(chainId),
+        isCorrect: chainId === TARGET_CHAIN_ID,
+      });
+
+      if (chainId !== TARGET_CHAIN_ID) {
+        toast.warning('Wrong network', {
+          description: `Please switch to ${SUPPORTED_NETWORKS[TARGET_CHAIN_ID]?.name || 'the correct network'}`,
+        });
+      } else {
+        toast.success(`Connected to ${getNetworkName(chainId)}`);
+      }
+
+      // Refresh balance on network change
+      if (wallet.address && provider) {
+        try {
+          const balance = await provider.getBalance(wallet.address);
+          setWallet((prev) => ({
+            ...prev,
+            balance: parseFloat(formatEther(balance)).toFixed(4),
+          }));
+        } catch (error) {
+          console.error('Failed to refresh balance:', error);
+        }
+      }
     };
 
     window.ethereum.on('accountsChanged', handleAccountsChanged);
@@ -159,10 +305,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.ethereum?.removeListener?.('accountsChanged', handleAccountsChanged);
       window.ethereum?.removeListener?.('chainChanged', handleChainChanged);
     };
-  }, [wallet.isConnected, wallet.address, walletType, disconnect]);
+  }, [wallet.isConnected, wallet.address, walletType, disconnect, provider]);
 
   return (
-    <WalletContext.Provider value={{ wallet, walletType, connect, disconnect, provider, isConnecting }}>
+    <WalletContext.Provider
+      value={{
+        wallet,
+        walletType,
+        network,
+        targetChainId: TARGET_CHAIN_ID,
+        connect,
+        disconnect,
+        switchNetwork,
+        provider,
+        isConnecting,
+      }}
+    >
       {children}
     </WalletContext.Provider>
   );
